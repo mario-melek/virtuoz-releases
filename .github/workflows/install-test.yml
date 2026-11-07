@@ -1,0 +1,33 @@
+name: Test d'installation Windows
+on:
+  workflow_dispatch:
+jobs:
+  install-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Installation comme un membre (install.ps1)
+        shell: powershell
+        run: |
+          $env:CZ_NO_OPEN = '1'
+          $s = (Invoke-WebRequest "https://raw.githubusercontent.com/mario-melek/virtuoz/main/install.ps1?t=$env:GITHUB_RUN_ID" -UseBasicParsing).Content
+          if ($s -is [byte[]]) { $s = [Text.Encoding]::UTF8.GetString($s) }
+          Invoke-Expression $s
+          Write-Host "exit code: $LASTEXITCODE"
+          if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 3) { exit 1 }
+          exit 0
+      - name: Ce qui est installé
+        shell: powershell
+        run: |
+          $e = Join-Path $env:LOCALAPPDATA 'Programs\virtuoz\Virtuoz.exe'
+          $l = Join-Path $env:LOCALAPPDATA 'Programs\virtuoz-launcher\Virtuoz Launcher.exe'
+          "Virtuoz: $((Get-Item $e).VersionInfo.ProductVersion)"
+          "Launcher: $((Get-Item $l).VersionInfo.ProductVersion)"
+          Get-Content (Join-Path $env:LOCALAPPDATA 'Programs\virtuoz\resources\app-update.yml')
+          Get-ChildItem HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall | ForEach-Object { (Get-ItemProperty $_.PSPath).DisplayName } | Where-Object { $_ -like 'Virtuoz*' }
+      - name: Autotest de Virtuoz installé
+        shell: powershell
+        run: |
+          # a fresh shell: the PATH the installer changed (git, ffmpeg, Python, Node.js, Claude Code)
+          $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          ./build/selftest.ps1
