@@ -1,6 +1,7 @@
 name: Test du chemin Claude
 # Like a member: Claude Code gets the README's sentence and installs Virtuoz on a fresh computer, following AGENTS.md.
-# Needs the repository secret ANTHROPIC_API_KEY (each run uses some API credit).
+# Needs the repository secret CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`: it runs on the Claude subscription and
+# counts against its usage limits), or ANTHROPIC_API_KEY.
 on:
   workflow_dispatch:
     inputs:
@@ -16,6 +17,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 75
     env:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
       - uses: actions/checkout@v4
