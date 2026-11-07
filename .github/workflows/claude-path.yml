@@ -38,6 +38,11 @@ jobs:
           echo "longueur: ${#T}"
           case "$T" in sk-ant-oat*) echo "debut attendu: oui" ;; *) echo "debut attendu: NON" ;; esac
           case "$T" in *[[:space:]]*) echo "contient un espace ou un retour a la ligne: OUI" ;; *) echo "contient un espace: non" ;; esac
+          # a token never has spaces: a copy from a terminal that wrapped the line adds them
+          C=$(printf '%s' "$T" | tr -d '[:space:]')
+          echo "::add-mask::$C"
+          echo "CLAUDE_CODE_OAUTH_TOKEN=$C" >> "$GITHUB_ENV"
+          echo "longueur sans espaces: ${#C}"
       - name: Le membre colle la phrase du README
         shell: bash
         run: |
