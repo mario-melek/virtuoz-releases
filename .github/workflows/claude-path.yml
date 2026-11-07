@@ -1,0 +1,67 @@
+name: Test du chemin Claude
+# Like a member: Claude Code gets the README's sentence and installs Virtuoz on a fresh computer, following AGENTS.md.
+# Needs the repository secret ANTHROPIC_API_KEY (each run uses some API credit).
+on:
+  workflow_dispatch:
+    inputs:
+      phrase:
+        description: "Ce que le membre colle dans Claude"
+        default: "Installe Virtuoz pour moi : https://github.com/mario-melek/virtuoz"
+jobs:
+  claude-install:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Claude Code (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          irm https://claude.ai/install.ps1 | iex
+          "$env:USERPROFILE\.local\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+      - name: Claude Code (Mac)
+        if: runner.os == 'macOS'
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Le membre colle la phrase du README
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/member" && cd "$RUNNER_TEMP/member"
+          claude -p "${{ inputs.phrase }}" --dangerously-skip-permissions --output-format stream-json --verbose > "$RUNNER_TEMP/claude.jsonl" 2> "$RUNNER_TEMP/claude.err" || echo "claude exit code $?"
+          PY=$(command -v python3 || command -v python)
+          "$PY" - "$RUNNER_TEMP/claude.jsonl" <<'PY'
+          import json, sys
+          for line in open(sys.argv[1], encoding="utf-8", errors="replace"):
+              try: m = json.loads(line)
+              except Exception: continue
+              if m.get("type") == "assistant":
+                  for c in m["message"].get("content", []):
+                      if c.get("type") == "text": print("CLAUDE:", c["text"][:1500])
+                      if c.get("type") == "tool_use": print("  ->", json.dumps(c.get("input"))[:300])
+              if m.get("type") == "result": print("RESULT:", m.get("subtype"), "| turns", m.get("num_turns"), "| cost $", m.get("total_cost_usd")); print(m.get("result", "")[:3000])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: claude-${{ runner.os }}
+          path: ${{ runner.temp }}/claude.*
+      - name: Virtuoz est-il installé et fonctionne-t-il ?
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          Get-Process Virtuoz -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          ./build/selftest.ps1
+      - name: Virtuoz est-il installé et fonctionne-t-il ? (Mac)
+        if: runner.os == 'macOS'
+        run: |
+          pkill -x Virtuoz || true
+          curl -fsSL -o selftest.sh https://raw.githubusercontent.com/mario-melek/virtuoz-mac-releases/main/build/selftest.sh
+          bash selftest.sh /Applications/Virtuoz.app installed
